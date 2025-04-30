@@ -3,6 +3,12 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Int32
 
+def deadzone(raw_value : int, center : int = 1500, deadzone_value : int = 100):
+    if(abs(raw_value - center) <= deadzone_value):
+        return center
+    else:
+        return raw_value
+
 
 
 class IBusReader(Node):
@@ -11,6 +17,11 @@ class IBusReader(Node):
     def __init__(self):
 
         super().__init__('ibus_reader')
+
+        # ibus param, default to AMA0, can be changed through launch args
+        self.declare_parameter("ibus_channel", "/dev/ttyAMA0")
+        ibus_param = self.get_parameter("ibus_channel")
+
         self.pub_1 = self.create_publisher(Int32, 'ch1', 1)
         self.pub_2 = self.create_publisher(Int32, 'ch2', 1)
         self.pub_3 = self.create_publisher(Int32, 'ch3', 1)
@@ -29,8 +40,14 @@ class IBusReader(Node):
         self.ch7 = 0
         self.ch8 = 0
         
-        
-        self.ser = serial.Serial("/dev/ttyAMA0", 115200)
+        serial_connected = False
+        while not serial_connected:
+            try:
+                self.ser = serial.Serial(ibus_param.value, 115200)
+                serial_connected = True
+            except serial.SerialException:
+                self.get_logger().log(f"Waiting for {ibus_param.value}...", 20)
+                
         self.ser.parity = serial.PARITY_NONE
         self.ser.stopbits = serial.STOPBITS_ONE
         self.timer = self.create_timer(0.001, self.timer_callback)
@@ -95,13 +112,13 @@ class IBusReader(Node):
         self.read_serial_data()
         
         msg = Int32()
-        msg.data = self.ch1
+        msg.data = deadzone(self.ch1, deadzone_value=50)
         self.pub_1.publish(msg)
-        msg.data = self.ch2
+        msg.data = deadzone(self.ch2)
         self.pub_2.publish(msg)
-        msg.data = self.ch3
+        msg.data = deadzone(self.ch3)
         self.pub_3.publish(msg)
-        msg.data = self.ch4
+        msg.data = deadzone(self.ch4 ,deadzone_value=50)
         self.pub_4.publish(msg)
         msg.data = self.ch5
         self.pub_5.publish(msg)
